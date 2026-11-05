@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+
+// API route to check if setup is needed (bypasses RLS)
+export async function GET() {
+  try {
+    const supabase = createAdminClient()
+
+    const { data: admins, error } = await supabase.from("admins").select("id").limit(1)
+
+    if (error) {
+      console.error("[v0] Check setup error:", error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      needsSetup: !admins || admins.length === 0,
+    })
+  } catch (error: any) {
+    console.error("[v0] Check setup error:", error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
