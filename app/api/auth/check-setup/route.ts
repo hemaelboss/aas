@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    const { data: admins, error } = await supabase.from("admins").select("id").limit(1)
+    const { data: adminCount, error } = await supabase.rpc("admin_count")
 
     if (error) {
       console.error("[v0] Check setup error:", error)
@@ -14,7 +14,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      needsSetup: !admins || admins.length === 0,
+      needsSetup: Number(adminCount ?? 0) === 0,
     })
   } catch (error: any) {
     console.error("[v0] Check setup error:", error)
