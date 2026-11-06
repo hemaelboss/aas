@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { createServerClient } from "@/lib/supabase/server"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
 // Helper function to fetch all records with pagination
@@ -29,6 +30,25 @@ async function fetchAllRecords(supabase: any, tableName: string) {
 
 export async function GET() {
   try {
+    const authClient = await createServerClient()
+    const {
+      data: { user },
+    } = await authClient.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 401 })
+    }
+
+    const { data: adminData, error: adminError } = await authClient
+      .from("admins")
+      .select("id")
+      .eq("id", user.id)
+      .single()
+
+    if (adminError || !adminData) {
+      return NextResponse.json({ error: "ليس لديك صلاحيات للوصول" }, { status: 403 })
+    }
+
     const supabase = getSupabaseAdminClient()
 
     // Get all customers with pagination
