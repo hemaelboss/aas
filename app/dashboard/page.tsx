@@ -35,6 +35,8 @@ import {
   ChevronsRight,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 
 type Customer = {
   id: string
@@ -1011,6 +1013,19 @@ export default function DashboardPage() {
   // Total actual monthly income
   const calculatedMonthlyIncome = newSubscriptionsRevenue + renewalsRevenue
 
+  const chartConfig = {
+    newSubscriptions: { label: "اشتراكات جديدة", color: "var(--chart-1)" },
+    renewals: { label: "تجديدات", color: "var(--chart-2)" },
+    revenue: { label: "الإيرادات", color: "var(--chart-3)" },
+  } satisfies ChartConfig
+
+  const chartData = monthlyStats.slice(-6).map((stat: any) => ({
+    month: new Date(`${stat.month}-01`).toLocaleDateString("ar-EG-u-ca-gregory", { month: "short" }),
+    newSubscriptions: stat.newSubscriptions || 0,
+    renewals: stat.renewals || 0,
+    revenue: (stat.newRevenue || 0) + (stat.renewalRevenue || 0),
+  }))
+
   const filteredCustomers = customers.filter((customer) => {
     const matchesSearch =
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1633,6 +1648,58 @@ export default function DashboardPage() {
                       إضافة حساب
                     </Button>
                   </div>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+                  <Card className="overflow-hidden border-slate-200/80 shadow-sm">
+                    <CardHeader className="border-b bg-slate-50/70 pb-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-base sm:text-lg">نشاط الاشتراكات</CardTitle>
+                          <p className="mt-1 text-xs text-muted-foreground">آخر ستة أشهر</p>
+                        </div>
+                        <TrendingUp className="h-5 w-5 text-indigo-600" />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-5">
+                      {chartData.length > 0 ? (
+                        <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                          <BarChart accessibilityLayer data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                            <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                            <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
+                            <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} />
+                            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                            <Bar dataKey="newSubscriptions" fill="var(--color-newSubscriptions)" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="renewals" fill="var(--color-renewals)" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ChartContainer>
+                      ) : (
+                        <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">لا توجد بيانات كافية بعد</div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="overflow-hidden border-slate-200/80 shadow-sm">
+                    <CardHeader className="border-b bg-slate-50/70 pb-4">
+                      <CardTitle className="text-base sm:text-lg">الإيرادات الشهرية</CardTitle>
+                      <p className="mt-1 text-xs text-muted-foreground">مقارنة سريعة للإيرادات</p>
+                    </CardHeader>
+                    <CardContent className="pt-5">
+                      {chartData.length > 0 ? (
+                        <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                          <BarChart accessibilityLayer data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                            <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                            <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
+                            <YAxis tickLine={false} axisLine={false} width={44} tickFormatter={(value) => `${value}`} />
+                            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                            <Bar dataKey="revenue" fill="var(--color-revenue)" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ChartContainer>
+                      ) : (
+                        <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">لا توجد بيانات كافية بعد</div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
 
                 {accountsExpiringSoon.length > 0 && (
