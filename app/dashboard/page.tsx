@@ -1229,9 +1229,9 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <div className="mx-auto size-10 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-700"></div>
           <p className="mt-4 text-gray-600">جاري التحميل...</p>
         </div>
       </div>
@@ -1239,35 +1239,29 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50" dir="rtl">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-3 rounded-xl shadow-lg">
-                <Users className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  لوحة التحكم
-                </h1>
-                <p className="text-sm text-gray-600">مرحباً، {currentAdmin?.full_name}</p>
-              </div>
+    <div className="min-h-screen bg-[#f5f7f8] text-slate-900" dir="rtl">
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 shadow-sm shadow-slate-900/[0.02] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-900/15">
+              <Users className="size-5" />
             </div>
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              className="flex items-center gap-2 hover:bg-red-50 hover:text-red-600 hover:border-red-300 w-full sm:w-auto bg-transparent"
-            >
-              <LogOut className="h-4 w-4" />
-              تسجيل الخروج
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">لوحة التحكم</h1>
+              <p className="mt-0.5 truncate text-xs text-slate-500">مرحباً، {currentAdmin?.full_name}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 sm:inline-flex">نظام الإدارة</span>
+            <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2 rounded-xl border-slate-200 text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700">
+              <LogOut className="size-4" />
+              <span className="hidden sm:inline">تسجيل الخروج</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 sm:py-8">
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {customersExpiringSoon.length > 0 && (
           <div className="mb-6 sm:mb-8">
             <Card className="bg-gradient-to-r from-red-50 via-orange-50 to-yellow-50 border-red-300 shadow-xl">
@@ -1352,72 +1346,72 @@ export default function DashboardPage() {
         )}
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-5 xl:grid-cols-4">
           {/* Monthly Income Widget - Super Admin Only */}
           {currentAdmin?.role === "super_admin" && (
-            <Card className="bg-gradient-to-br from-green-500 to-emerald-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+            <Card className="rounded-2xl border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm sm:text-base font-medium flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium text-slate-500 sm:text-base">
                   <DollarSign className="h-5 w-5" />
                   إجمالي الدخل الشهري
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl sm:text-3xl font-bold">{calculatedMonthlyIncome.toLocaleString()} ج.م</p>
+                <p className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{calculatedMonthlyIncome.toLocaleString()} ج.م</p>
               </CardContent>
             </Card>
           )}
 
-          <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm sm:text-base font-medium flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-slate-500 sm:text-base">
                 <Users className="h-5 w-5" />
                 إجمالي المشتركين
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl sm:text-3xl font-bold">{totalSubscribers}</p>
-              <p className="text-xs sm:text-sm text-blue-100 mt-1">نشط: {activeSubscriptions}</p>
+              <p className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{totalSubscribers}</p>
+              <p className="mt-1 text-xs text-slate-500 sm:text-sm">نشط: {activeSubscriptions}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-purple-500 to-pink-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm sm:text-base font-medium flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-slate-500 sm:text-base">
                 <CreditCard className="h-5 w-5" />
                 إجمالي الحسابات
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl sm:text-3xl font-bold">{totalAccounts}</p>
+              <p className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{totalAccounts}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-orange-500 to-red-600 text-white border-0 shadow-lg hover:shadow-xl transition-shadow">
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm sm:text-base font-medium flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-slate-500 sm:text-base">
                 <AlertCircle className="h-5 w-5" />
                 ح��ابات موشكة على الانتهاء
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl sm:text-3xl font-bold">{accountsExpiringSoon.length}</p>
-              <p className="text-xs sm:text-sm text-orange-100 mt-1">خلال 7 أيام</p>
+              <p className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{accountsExpiringSoon.length}</p>
+              <p className="mt-1 text-xs text-slate-500 sm:text-sm">خلال 7 أيام</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Monthly Summary */}
-        <Card className="mb-6 sm:mb-8 shadow-lg border-indigo-100">
-          <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b">
+        <Card className="mb-6 rounded-2xl border-slate-200 shadow-sm sm:mb-8">
+          <CardHeader className="border-b border-slate-100 bg-white">
             <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" />
+              <TrendingUp className="h-5 w-5 text-emerald-700 sm:h-6 sm:w-6" />
               ملخص إحصائيات الشهر الحالي
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-green-50 rounded-xl p-4 sm:p-6 border border-green-200">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <div className="flex items-center gap-3 mb-2">
                   <CheckCircle className="h-5 w-5 text-green-600" />
                   <p className="text-sm sm:text-base text-gray-700 font-medium">اشتراكات جديدة</p>
@@ -1425,7 +1419,7 @@ export default function DashboardPage() {
                 <p className="text-2xl sm:text-3xl font-bold text-green-600">{monthlyNewSubscriptions}</p>
               </div>
 
-              <div className="bg-blue-50 rounded-xl p-4 sm:p-6 border border-blue-200">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <div className="flex items-center gap-3 mb-2">
                   <TrendingUp className="h-5 w-5 text-blue-600" />
                   <p className="text-sm sm:text-base text-gray-700 font-medium">تجديدات</p>
@@ -1433,7 +1427,7 @@ export default function DashboardPage() {
                 <p className="text-2xl sm:text-3xl font-bold text-blue-600">{monthlyRenewalsCount}</p>
               </div>
 
-              <div className="bg-red-50 rounded-xl p-4 sm:p-6 border border-red-200">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <div className="flex items-center gap-3 mb-2">
                   <XCircle className="h-5 w-5 text-red-600" />
                   <p className="text-sm sm:text-base text-gray-700 font-medium">اشتراكات منتهية</p>
@@ -1445,7 +1439,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Global Search */}
-        <Card className="mb-6 sm:mb-8 shadow-lg border-indigo-100 bg-gradient-to-r from-indigo-50 to-purple-50">
+        <Card className="mb-6 rounded-2xl border-slate-200 bg-white shadow-sm sm:mb-8">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
               <Search className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" />
@@ -1458,7 +1452,7 @@ export default function DashboardPage() {
                 placeholder="ابحث بالاسم أو البريد الإلكتروني أو اسم الحساب..."
                 value={globalSearchTerm}
                 onChange={(e) => setGlobalSearchTerm(e.target.value)}
-                className="border-indigo-300 focus:border-indigo-600 focus:ring-indigo-500"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50 focus-visible:bg-white"
               />
               
               {/* Search Results */}
@@ -1577,9 +1571,9 @@ export default function DashboardPage() {
         </Card>
 
         {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 mb-6">
-          <div className="border-b border-gray-200 overflow-x-auto flex justify-between items-center pr-4">
-            <nav className="flex gap-2 sm:gap-4 p-2 sm:p-4 min-w-max sm:min-w-0">
+        <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 sm:px-4">
+            <nav aria-label="التنقل الرئيسي" className="flex min-w-0 gap-1 overflow-x-auto py-2">
               {/* Modified tabs to include a subscribers tab and integrated existing tabs */}
               {[
                 { id: "overview", label: "نظرة عامة", icon: Users },
@@ -1598,8 +1592,8 @@ export default function DashboardPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === tab.id ? "bg-indigo-600 text-white shadow-md" : "text-gray-600 hover:bg-gray-100"
+                  className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                    activeTab === tab.id ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                 >
                   <tab.icon className="h-4 w-4" />
@@ -1630,19 +1624,22 @@ export default function DashboardPage() {
             {/* Overview Tab */}
             {activeTab === "overview" && (
               <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <h2 className="text-xl sm:text-2xl font-bold text-gray-800">نظرة عامة</h2>
+                <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+                  <div>
+                    <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">نظرة عامة</h2>
+                    <p className="mt-1 text-sm text-slate-500">ملخص سريع لأداء الاشتراكات والحسابات</p>
+                  </div>
                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                     <Button
                       onClick={() => openModal("addCustomer")}
-                      className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 w-full sm:w-auto"
+                      className="w-full rounded-xl bg-emerald-800 text-white hover:bg-emerald-900 sm:w-auto"
                     >
                       <UserPlus className="h-4 w-4 ml-2" />
                       إضافة مشترك
                     </Button>
                     <Button
                       onClick={() => openModal("addAccount")}
-                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 w-full sm:w-auto"
+                      className="w-full rounded-xl bg-slate-900 text-white hover:bg-slate-800 sm:w-auto"
                     >
                       <Plus className="h-4 w-4 ml-2" />
                       إضافة حساب
@@ -1651,14 +1648,14 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-                  <Card className="overflow-hidden border-slate-200/80 shadow-sm">
-                    <CardHeader className="border-b bg-slate-50/70 pb-4">
+                  <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
+                    <CardHeader className="border-b border-slate-100 bg-white pb-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <CardTitle className="text-base sm:text-lg">نشاط الاشتراكات</CardTitle>
                           <p className="mt-1 text-xs text-muted-foreground">آخر ستة أشهر</p>
                         </div>
-                        <TrendingUp className="h-5 w-5 text-indigo-600" />
+                        <TrendingUp className="h-5 w-5 text-emerald-700" />
                       </div>
                     </CardHeader>
                     <CardContent className="pt-5">
@@ -1679,8 +1676,8 @@ export default function DashboardPage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="overflow-hidden border-slate-200/80 shadow-sm">
-                    <CardHeader className="border-b bg-slate-50/70 pb-4">
+                  <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
+                    <CardHeader className="border-b border-slate-100 bg-white pb-4">
                       <CardTitle className="text-base sm:text-lg">الإيرادات الشهرية</CardTitle>
                       <p className="mt-1 text-xs text-muted-foreground">مقارنة سريعة للإيرادات</p>
                     </CardHeader>
