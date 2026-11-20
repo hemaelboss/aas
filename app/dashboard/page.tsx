@@ -74,6 +74,42 @@ type Admin = {
   created_at: string
 }
 
+const CUSTOMER_COLUMNS =
+  "id,name,email,phone,account_id,start_date,end_date,price,status,auto_notifications,created_at"
+const PAGE_FETCH_SIZE = 1000
+const MAX_PARALLEL_PAGES = 4
+
+async function fetchAllPages<T>(
+  queryForRange: (from: number, to: number, includeCount: boolean) => any,
+): Promise<T[]> {
+  const firstPage = await queryForRange(0, PAGE_FETCH_SIZE - 1, true)
+  if (firstPage.error) throw firstPage.error
+
+  const rows = [...(firstPage.data ?? [])] as T[]
+  const pageCount = Math.ceil((firstPage.count ?? rows.length) / PAGE_FETCH_SIZE)
+
+  for (let firstPageIndex = 1; firstPageIndex < pageCount; firstPageIndex += MAX_PARALLEL_PAGES) {
+    const pageIndexes = Array.from(
+      { length: Math.min(MAX_PARALLEL_PAGES, pageCount - firstPageIndex) },
+      (_, index) => firstPageIndex + index,
+    )
+    const pages = await Promise.all(
+      pageIndexes.map(async (pageIndex) => {
+        const { data, error } = await queryForRange(
+          pageIndex * PAGE_FETCH_SIZE,
+          (pageIndex + 1) * PAGE_FETCH_SIZE - 1,
+          false,
+        )
+        if (error) throw error
+        return (data ?? []) as T[]
+      }),
+    )
+    rows.push(...pages.flat())
+  }
+
+  return rows
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [supabase, setSupabase] = useState<any>(null)
@@ -169,54 +205,67 @@ export default function DashboardPage() {
 
   const autoExpireSubscriptions = async () => {
     const today = new Date().toISOString().split("T")[0]
-    const expiredCustomers = customers.filter((c) => c.status === "active" && c.end_date < today)
+    const expiredCustomers = customers.filter((customer) => customer.status === "active" && customer.end_date < today)
+    const expiredIds = expiredCustomers.map((customer) => customer.id)
+    const batchSize = 100
+    const concurrentBatches = 4
+    const batches = Array.from({ length: Math.ceil(expiredIds.length / batchSize) }, (_, index) =>
+      expiredIds.slice(index * batchSize, (index + 1) * batchSize),
+    )
 
-    for (const customer of expiredCustomers) {
-      await supabase.from("customers").update({ status: "expired" }).eq("id", customer.id)
+    for (let index = 0; index < batches.length; index += concurrentBatches) {
+      const results = await Promise.all(
+        batches.slice(index, index + concurrentBatches).map((ids) =>
+          supabase.from("customers").update({ status: "expired" }).in("id", ids),
+        ),
+      )
+      const failedUpdate = results.find((result: any) => result.error)
+      if (failedUpdate?.error) {
+        console.error("Error expiring subscriptions:", failedUpdate.error)
+        return
+      }
     }
 
-    if (expiredCustomers.length > 0) {
-      loadData()
+    if (expiredIds.length > 0) {
+      await loadData()
     }
   }
 
   const loadData = async () => {
     try {
       setLoading(true)
+      const currentMonth = new Date().toISOString().slice(0, 7)
+      const customerQuery = (from: number, to: number, includeCount: boolean) =>
+        supabase
+          .from("customers")
+          .select(CUSTOMER_COLUMNS, includeCount ? { count: "exact" } : undefined)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to)
+      const renewalQuery = (from: number, to: number, includeCount: boolean) =>
+        supabase
+          .from("renewals")
+          .select("*, customers(*), accounts(*)", includeCount ? { count: "exact" } : undefined)
+          .gte("created_at", `${currentMonth}-01`)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to)
 
-      // Fetch all customers with pagination to bypass 1000 row limit
-      const fetchAllCustomers = async () => {
-        const allCustomers: Customer[] = []
-        let page = 0
-        const pageSize = 1000
-        let hasMore = true
-
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from("customers")
-            .select("*")
-            .order("created_at", { ascending: false })
-            .range(page * pageSize, (page + 1) * pageSize - 1)
-
-          if (error) throw error
-          if (data && data.length > 0) {
-            allCustomers.push(...data)
-            page++
-            hasMore = data.length === pageSize
-          } else {
-            hasMore = false
-          }
-        }
-        return allCustomers
-      }
-
-      const [customersData, accountsRes, adminsRes] = await Promise.all([
-        fetchAllCustomers(),
+      const [customersData, accountsRes, adminsRes, statsData, renewalsData] = await Promise.all([
+        fetchAllPages<Customer>(customerQuery),
         supabase.from("accounts").select("*").order("created_at", { ascending: false }),
         supabase.from("admins").select("*").order("created_at", { ascending: false }),
+        fetch("/api/stats/monthly")
+          .then((response) => response.json())
+          .catch((error) => {
+            console.error("Error loading monthly statistics:", error)
+            return null
+          }),
+        fetchAllPages<any>(renewalQuery).catch((error) => {
+          console.error("Error loading current month renewals:", error)
+          return []
+        }),
       ])
-
-      console.log("[v0] Data loaded - Customers:", customersData?.length || 0, "Accounts:", accountsRes.data?.length || 0, "Admins:", adminsRes.data?.length || 0)
 
       if (customersData) {
         setCustomers(customersData)
@@ -224,9 +273,9 @@ export default function DashboardPage() {
         const sevenDaysLater = new Date()
         sevenDaysLater.setDate(today.getDate() + 7)
 
-        const expiring = customersData.filter((c) => {
-          if (c.status !== "active") return false
-          const endDate = new Date(c.end_date)
+        const expiring = customersData.filter((customer) => {
+          if (customer.status !== "active") return false
+          const endDate = new Date(customer.end_date)
           return endDate >= today && endDate <= sevenDaysLater
         })
         setExpiringCustomers(expiring)
@@ -234,40 +283,19 @@ export default function DashboardPage() {
       if (accountsRes.data) setAccounts(accountsRes.data)
       if (adminsRes.data) setAdmins(adminsRes.data)
 
-      const statsResponse = await fetch("/api/stats/monthly")
-      const statsData = await statsResponse.json()
-      if (statsData.data) {
+      if (statsData?.data) {
         setMonthlyStats(statsData.data)
-        const currentMonth = new Date().toISOString().slice(0, 7)
         const currentMonthStats = statsData.data.find((stat: any) => stat.month === currentMonth)
         setMonthlyRevenue(currentMonthStats?.revenue || 0)
       }
 
-      // Fetch current month renewals with customer details
-      const currentMonth = new Date().toISOString().slice(0, 7)
-      const { data: renewalsData } = await supabase
-        .from("renewals")
-        .select("*, customers(*), accounts(*)")
-        .gte("created_at", currentMonth + "-01")
-        .order("created_at", { ascending: false })
-      
-      if (renewalsData) {
-        // Remove duplicates - keep only the latest renewal per customer
-        const uniqueRenewals = renewalsData.reduce((acc: any[], renewal: any) => {
-          const existingIndex = acc.findIndex(r => r.customer_id === renewal.customer_id)
-          if (existingIndex === -1) {
-            // No existing renewal for this customer, add it
-            acc.push(renewal)
-          } else {
-            // Replace if this renewal is newer
-            if (new Date(renewal.created_at) > new Date(acc[existingIndex].created_at)) {
-              acc[existingIndex] = renewal
-            }
-          }
-          return acc
-        }, [])
-        setMonthlyRenewals(uniqueRenewals)
+      const latestRenewalByCustomer = new Map<string, any>()
+      for (const renewal of renewalsData) {
+        if (!latestRenewalByCustomer.has(renewal.customer_id)) {
+          latestRenewalByCustomer.set(renewal.customer_id, renewal)
+        }
       }
+      setMonthlyRenewals(Array.from(latestRenewalByCustomer.values()))
     } catch (error) {
       console.error("Error loading data:", error)
     } finally {

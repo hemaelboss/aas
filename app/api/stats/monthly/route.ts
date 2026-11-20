@@ -2,30 +2,36 @@ import { NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase/server"
 import { getSupabaseAdminClient } from "@/lib/supabase/admin"
 
-// Helper function to fetch all records with pagination
-async function fetchAllRecords(supabase: any, tableName: string) {
-  const allRecords: any[] = []
-  let page = 0
-  const pageSize = 1000
-  let hasMore = true
+const PAGE_SIZE = 1000
+const MAX_PARALLEL_PAGES = 4
 
-  while (hasMore) {
-    const { data, error } = await supabase
-      .from(tableName)
-      .select("*")
-      .order("created_at", { ascending: true })
-      .range(page * pageSize, (page + 1) * pageSize - 1)
+async function fetchAllPages<T>(queryForRange: (from: number, to: number, includeCount: boolean) => any): Promise<T[]> {
+  const firstPage = await queryForRange(0, PAGE_SIZE - 1, true)
+  if (firstPage.error) throw firstPage.error
 
-    if (error) throw error
-    if (data && data.length > 0) {
-      allRecords.push(...data)
-      page++
-      hasMore = data.length === pageSize
-    } else {
-      hasMore = false
-    }
+  const rows = [...(firstPage.data ?? [])] as T[]
+  const pageCount = Math.ceil((firstPage.count ?? rows.length) / PAGE_SIZE)
+
+  for (let firstPageIndex = 1; firstPageIndex < pageCount; firstPageIndex += MAX_PARALLEL_PAGES) {
+    const pageIndexes = Array.from(
+      { length: Math.min(MAX_PARALLEL_PAGES, pageCount - firstPageIndex) },
+      (_, index) => firstPageIndex + index,
+    )
+    const pages = await Promise.all(
+      pageIndexes.map(async (pageIndex) => {
+        const { data, error } = await queryForRange(
+          pageIndex * PAGE_SIZE,
+          (pageIndex + 1) * PAGE_SIZE - 1,
+          false,
+        )
+        if (error) throw error
+        return (data ?? []) as T[]
+      }),
+    )
+    rows.push(...pages.flat())
   }
-  return allRecords
+
+  return rows
 }
 
 export async function GET() {
@@ -51,23 +57,57 @@ export async function GET() {
 
     const supabase = getSupabaseAdminClient()
 
-    // Get all customers with pagination
-    const customers = await fetchAllRecords(supabase, "customers")
-
-    // Get all renewals with pagination
-    let renewals: any[] = []
-    try {
-      renewals = await fetchAllRecords(supabase, "renewals")
-    } catch (renewalsError) {
-      console.error("[v0] Error fetching renewals:", renewalsError)
-    }
-
-    // Process data to get monthly statistics for the last 12 months
-    const monthlyStats: Record<string, any> = {}
-    // Use UTC date to ensure consistency across timezones
     const now = new Date()
     const currentYear = now.getUTCFullYear()
     const currentMonth = now.getUTCMonth()
+    const chartStart = new Date(Date.UTC(currentYear, currentMonth - 11, 1))
+    const nextMonthStart = new Date(Date.UTC(currentYear, currentMonth + 1, 1))
+    const chartStartDate = chartStart.toISOString().slice(0, 10)
+    const chartStartTimestamp = chartStart.toISOString()
+    const chartEndDate = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).toISOString().slice(0, 10)
+    const chartEndExclusive = nextMonthStart.toISOString()
+
+    const customerQuery = (from: number, to: number, includeCount: boolean) =>
+      supabase
+        .from("customers")
+        .select("id,created_at,start_date,end_date,price", includeCount ? { count: "exact" } : undefined)
+        .gte("created_at", chartStartTimestamp)
+        .lt("created_at", chartEndExclusive)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+    const overlappingCustomerQuery = (from: number, to: number, includeCount: boolean) =>
+      supabase
+        .from("customers")
+        .select("id,created_at,start_date,end_date,price", includeCount ? { count: "exact" } : undefined)
+        .lte("start_date", chartEndDate)
+        .gte("end_date", chartStartDate)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+    const renewalQuery = (from: number, to: number, includeCount: boolean) =>
+      supabase
+        .from("renewals")
+        .select("id,customer_id,created_at,price", includeCount ? { count: "exact" } : undefined)
+        .gte("created_at", chartStartTimestamp)
+        .lt("created_at", chartEndExclusive)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+
+    const [newCustomers, overlappingCustomers, renewals] = await Promise.all([
+      fetchAllPages<any>(customerQuery),
+      fetchAllPages<any>(overlappingCustomerQuery),
+      fetchAllPages<any>(renewalQuery),
+    ])
+    const customersById = new Map<string, any>()
+    for (const customer of [...newCustomers, ...overlappingCustomers]) {
+      customersById.set(customer.id, customer)
+    }
+    const customers = Array.from(customersById.values())
+
+    // Process data to get monthly statistics for the last 12 months
+    const monthlyStats: Record<string, any> = {}
     
     // Initialize last 12 months including current month
     for (let i = 11; i >= 0; i--) {
@@ -100,8 +140,7 @@ export async function GET() {
       }
 
       // Count expired subscriptions based on end_date (only if already expired)
-      const today = new Date()
-      if (customerEndDate < today) {
+      if (customerEndDate < now) {
         const expiredMonth = customer.end_date.slice(0, 7)
         if (monthlyStats[expiredMonth]) {
           monthlyStats[expiredMonth].expired++
