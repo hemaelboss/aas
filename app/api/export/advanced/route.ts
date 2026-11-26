@@ -1,8 +1,28 @@
+import { createServerClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
   try {
+    const authClient = await createServerClient()
+    const {
+      data: { user },
+    } = await authClient.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ success: false, error: "غير مصرح" }, { status: 401 })
+    }
+
+    const { data: admin, error: adminError } = await authClient
+      .from("admins")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    if (adminError || admin?.role !== "super_admin") {
+      return NextResponse.json({ success: false, error: "ليس لديك صلاحيات للوصول" }, { status: 403 })
+    }
+
     const supabase = createAdminClient()
     const body = await req.json()
 
@@ -184,12 +204,15 @@ export async function POST(req: NextRequest) {
       }
 
       allData.push(
-        ...finalCustomers.map(c => ({
-          ...c,
-          type: "عميل",
-          account_name: c.accounts?.name || "",
-          platform: c.accounts?.platform || "",
-        }))
+        ...finalCustomers.map(c => {
+          const account = Array.isArray(c.accounts) ? c.accounts[0] : c.accounts
+          return {
+            ...c,
+            type: "عميل",
+            account_name: account?.name || "",
+            platform: account?.platform || "",
+          }
+        }),
       )
     }
 

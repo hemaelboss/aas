@@ -47,7 +47,7 @@ export async function GET() {
 
     const { data: adminData, error: adminError } = await authClient
       .from("admins")
-      .select("id")
+      .select("role")
       .eq("id", user.id)
       .single()
 
@@ -55,6 +55,7 @@ export async function GET() {
       return NextResponse.json({ error: "ليس لديك صلاحيات للوصول" }, { status: 403 })
     }
 
+    const canViewRevenue = adminData.role === "super_admin"
     const supabase = getSupabaseAdminClient()
 
     const now = new Date()
@@ -70,7 +71,10 @@ export async function GET() {
     const customerQuery = (from: number, to: number, includeCount: boolean) =>
       supabase
         .from("customers")
-        .select("id,created_at,start_date,end_date,price", includeCount ? { count: "exact" } : undefined)
+        .select(
+          canViewRevenue ? "id,created_at,start_date,end_date,price" : "id,created_at,start_date,end_date",
+          includeCount ? { count: "exact" } : undefined,
+        )
         .gte("created_at", chartStartTimestamp)
         .lt("created_at", chartEndExclusive)
         .order("created_at", { ascending: true })
@@ -79,7 +83,10 @@ export async function GET() {
     const overlappingCustomerQuery = (from: number, to: number, includeCount: boolean) =>
       supabase
         .from("customers")
-        .select("id,created_at,start_date,end_date,price", includeCount ? { count: "exact" } : undefined)
+        .select(
+          canViewRevenue ? "id,created_at,start_date,end_date,price" : "id,created_at,start_date,end_date",
+          includeCount ? { count: "exact" } : undefined,
+        )
         .lte("start_date", chartEndDate)
         .gte("end_date", chartStartDate)
         .order("created_at", { ascending: true })
@@ -88,7 +95,10 @@ export async function GET() {
     const renewalQuery = (from: number, to: number, includeCount: boolean) =>
       supabase
         .from("renewals")
-        .select("id,customer_id,created_at,price", includeCount ? { count: "exact" } : undefined)
+        .select(
+          canViewRevenue ? "id,customer_id,created_at,price" : "id,customer_id,created_at",
+          includeCount ? { count: "exact" } : undefined,
+        )
         .gte("created_at", chartStartTimestamp)
         .lt("created_at", chartEndExclusive)
         .order("created_at", { ascending: true })
@@ -119,9 +129,8 @@ export async function GET() {
         newSubscriptions: 0,
         renewals: 0,
         expired: 0,
-        newRevenue: 0,
-        renewalRevenue: 0,
         activeCount: 0,
+        ...(canViewRevenue ? { newRevenue: 0, renewalRevenue: 0 } : {}),
       }
     }
 
@@ -136,7 +145,7 @@ export async function GET() {
       const createdMonth = customer.created_at?.slice(0, 7)
       if (createdMonth && monthlyStats[createdMonth]) {
         monthlyStats[createdMonth].newSubscriptions++
-        monthlyStats[createdMonth].newRevenue += customerPrice
+        if (canViewRevenue) monthlyStats[createdMonth].newRevenue += customerPrice
       }
 
       // Count expired subscriptions based on end_date (only if already expired)
@@ -179,7 +188,7 @@ export async function GET() {
       const renewalMonth = renewal.created_at.slice(0, 7)
       if (monthlyStats[renewalMonth]) {
         monthlyStats[renewalMonth].renewals++
-        monthlyStats[renewalMonth].renewalRevenue += renewal.price || 0
+        if (canViewRevenue) monthlyStats[renewalMonth].renewalRevenue += renewal.price || 0
       }
     })
 

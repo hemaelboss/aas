@@ -37,6 +37,7 @@ import {
 import { useRouter } from "next/navigation"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { cn } from "@/lib/utils"
 
 type Customer = {
   id: string
@@ -173,10 +174,18 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    if (supabase) {
-      loadData()
-      checkAuth()
+    if (!supabase) return
+
+    const initializeDashboard = async () => {
+      try {
+        const admin = await checkAuth()
+        if (admin) await loadData(admin.role)
+      } catch (error) {
+        console.error("Error initializing dashboard:", error)
+      }
     }
+
+    void initializeDashboard()
   }, [supabase])
 
   useEffect(() => {
@@ -185,22 +194,25 @@ export default function DashboardPage() {
     }
   }, [customers])
 
-  const checkAuth = async () => {
-    if (!supabase) return
-    
+  const checkAuth = async (): Promise<Admin | null> => {
+    if (!supabase) return null
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
       router.push("/auth/login")
-      return
+      return null
     }
 
-    const { data: admin } = await supabase.from("admins").select("*").eq("id", user.id).single()
-
-    if (admin) {
-      setCurrentAdmin(admin)
+    const { data: admin, error } = await supabase.from("admins").select("*").eq("id", user.id).single()
+    if (error || !admin) {
+      router.push("/auth/login")
+      return null
     }
+
+    setCurrentAdmin(admin)
+    return admin
   }
 
   const autoExpireSubscriptions = async () => {
@@ -231,9 +243,10 @@ export default function DashboardPage() {
     }
   }
 
-  const loadData = async () => {
+  const loadData = async (adminRole?: Admin["role"]) => {
     try {
       setLoading(true)
+      const canViewRevenue = (adminRole ?? currentAdmin?.role) === "super_admin"
       const currentMonth = new Date().toISOString().slice(0, 7)
       const customerQuery = (from: number, to: number, includeCount: boolean) =>
         supabase
@@ -242,10 +255,13 @@ export default function DashboardPage() {
           .order("created_at", { ascending: false })
           .order("id", { ascending: true })
           .range(from, to)
+      const renewalColumns = canViewRevenue
+        ? "id,customer_id,account_id,old_end_date,new_end_date,price,created_at,customers(name),accounts(name)"
+        : "id,customer_id,account_id,old_end_date,new_end_date,created_at,customers(name),accounts(name)"
       const renewalQuery = (from: number, to: number, includeCount: boolean) =>
         supabase
           .from("renewals")
-          .select("*, customers(*), accounts(*)", includeCount ? { count: "exact" } : undefined)
+          .select(renewalColumns, includeCount ? { count: "exact" } : undefined)
           .gte("created_at", `${currentMonth}-01`)
           .order("created_at", { ascending: false })
           .order("id", { ascending: true })
@@ -891,7 +907,7 @@ export default function DashboardPage() {
             item.accounts?.name || item.account_id || "",
             item.old_end_date || "",
             item.new_end_date || "",
-            item.price?.toString() || "0",
+            currentAdmin?.role === "super_admin" ? item.price?.toString() || "0" : "",
             new Date(item.created_at).toLocaleDateString("ar-EG"),
           ]
         } else {
@@ -903,7 +919,7 @@ export default function DashboardPage() {
             item.phone || "",
             item.start_date || "",
             item.end_date || "",
-            item.price?.toString() || "0",
+            currentAdmin?.role === "super_admin" ? item.price?.toString() || "0" : "",
             item.status === "active" ? "نشط" : item.status === "expired" ? "منتهي" : "ملغي",
             new Date(item.created_at).toLocaleDateString("ar-EG"),
           ]
@@ -919,7 +935,7 @@ export default function DashboardPage() {
         "الهاتف",
         "تاريخ البداية",
         "تاريخ الانتهاء",
-        "السعر",
+        ...(currentAdmin?.role === "super_admin" ? ["السعر"] : []),
         "تاريخ الإنشاء",
       ]
       rows = data.map((item: Customer) => [
@@ -928,7 +944,7 @@ export default function DashboardPage() {
         item.phone || "",
         item.start_date,
         item.end_date,
-        item.price.toString(),
+        ...(currentAdmin?.role === "super_admin" ? [item.price?.toString() || "0"] : []),
         new Date(item.created_at).toLocaleDateString("ar-EG"),
       ])
     } else if (filename.includes("renewals")) {
@@ -978,7 +994,7 @@ export default function DashboardPage() {
         "الهاتف",
         "تاريخ البداية",
         "تاريخ الانتهاء",
-        "السعر",
+        ...(currentAdmin?.role === "super_admin" ? ["السعر"] : []),
         "الحالة",
         "تاريخ الإنشاء",
       ]
@@ -988,7 +1004,7 @@ export default function DashboardPage() {
         item.phone || "",
         item.start_date,
         item.end_date,
-        item.price.toString(),
+        ...(currentAdmin?.role === "super_admin" ? [item.price?.toString() || "0"] : []),
         item.status === "active" ? "نشط" : item.status === "expired" ? "منتهي" : "ملغي",
         new Date(item.created_at).toLocaleDateString("ar-EG"),
       ])
@@ -1031,15 +1047,18 @@ export default function DashboardPage() {
   
   // Calculate actual monthly income (new subscriptions + renewals this month).
   // A renewal updates start_date, so new subscriptions must use created_at.
-  const newSubscriptionsRevenue = customers
-  .filter((c) => c.created_at && c.created_at.startsWith(currentMonth))
-  .reduce((sum, c) => sum + (c.price || 0), 0)
-  
-  // Renewals revenue (from monthlyRenewals state which has actual renewal records)
-  const renewalsRevenue = monthlyRenewals.reduce((sum, r) => sum + (r.price || 0), 0)
-  
-  // Total actual monthly income
-  const calculatedMonthlyIncome = newSubscriptionsRevenue + renewalsRevenue
+  const isSuperAdmin = currentAdmin?.role === "super_admin"
+  const newSubscriptionsRevenue = isSuperAdmin
+    ? customers
+        .filter((c) => c.created_at && c.created_at.startsWith(currentMonth))
+        .reduce((sum, c) => sum + (c.price || 0), 0)
+    : 0
+
+  const renewalsRevenue = isSuperAdmin
+    ? monthlyRenewals.reduce((sum, renewal) => sum + (renewal.price || 0), 0)
+    : 0
+
+  const calculatedMonthlyIncome = isSuperAdmin ? newSubscriptionsRevenue + renewalsRevenue : 0
 
   const chartConfig = {
     newSubscriptions: { label: "اشتراكات جديدة", color: "var(--chart-1)" },
@@ -1542,7 +1561,7 @@ export default function DashboardPage() {
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600">
-                                {isCustomer ? result.email : `${result.platform}`}
+                                {isCustomer ? result.email : "platform" in result ? result.platform : ""}
                               </p>
                               {isAccount && (
                                 <p className="text-xs text-gray-500 mt-1">
@@ -1675,7 +1694,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+                <div className={cn("grid gap-4", currentAdmin?.role === "super_admin" && "lg:grid-cols-[1.4fr_1fr]")}>
                   <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
                     <CardHeader className="border-b border-slate-100 bg-white pb-4">
                       <div className="flex items-center justify-between gap-3">
@@ -1704,27 +1723,29 @@ export default function DashboardPage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
-                    <CardHeader className="border-b border-slate-100 bg-white pb-4">
-                      <CardTitle className="text-base sm:text-lg">الإيرادات الشهرية</CardTitle>
-                      <p className="mt-1 text-xs text-muted-foreground">مقارنة سريعة للإيرادات</p>
-                    </CardHeader>
-                    <CardContent className="pt-5">
-                      {chartData.length > 0 ? (
-                        <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                          <BarChart accessibilityLayer data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                            <CartesianGrid vertical={false} strokeDasharray="4 4" />
-                            <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
-                            <YAxis tickLine={false} axisLine={false} width={44} tickFormatter={(value) => `${value}`} />
-                            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-                            <Bar dataKey="revenue" fill="var(--color-revenue)" radius={[4, 4, 0, 0]} />
-                          </BarChart>
-                        </ChartContainer>
-                      ) : (
-                        <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">لا توجد بيانات كافية بعد</div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  {currentAdmin?.role === "super_admin" && (
+                    <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
+                      <CardHeader className="border-b border-slate-100 bg-white pb-4">
+                        <CardTitle className="text-base sm:text-lg">الإيرادات الشهرية</CardTitle>
+                        <p className="mt-1 text-xs text-muted-foreground">مقارنة سريعة للإيرادات</p>
+                      </CardHeader>
+                      <CardContent className="pt-5">
+                        {chartData.length > 0 ? (
+                          <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                            <BarChart accessibilityLayer data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                              <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                              <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
+                              <YAxis tickLine={false} axisLine={false} width={44} tickFormatter={(value) => `${value}`} />
+                              <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                              <Bar dataKey="revenue" fill="var(--color-revenue)" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ChartContainer>
+                        ) : (
+                          <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">لا توجد بيانات كافية بعد</div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
 
                 {accountsExpiringSoon.length > 0 && (
@@ -1804,7 +1825,7 @@ export default function DashboardPage() {
                                   <Button
                                     size="sm"
                                     onClick={() =>
-                                      window.open(`https://wa.me/${customer.phone.replace(/\D/g, "")}`, "_blank")
+                                      window.open(`https://wa.me/${customer.phone?.replace(/\D/g, "")}`, "_blank")
                                     }
                                     className="bg-green-500 hover:bg-green-600 text-white flex-1 sm:flex-none"
                                   >
@@ -1993,7 +2014,9 @@ export default function DashboardPage() {
                                 <Calendar className="h-3 w-3" />
                                 مدة الاشتراك: {subscriptionDuration} يوم
                               </span>
-                              <span className="text-xs bg-white/70 px-2 py-1 rounded">{customer.price} ج.م</span>
+                              {currentAdmin?.role === "super_admin" && (
+                                <span className="text-xs bg-white/70 px-2 py-1 rounded">{customer.price} ج.م</span>
+                              )}
                               <span className="text-xs bg-white/70 px-2 py-1 rounded flex items-center gap-1">
                                 <Calendar className="h-3 w-3" />
                                 {formatDate(customer.end_date)}
@@ -2015,7 +2038,7 @@ export default function DashboardPage() {
                               <Button
                                 size="sm"
                                 onClick={() =>
-                                  window.open(`https://wa.me/${customer.phone.replace(/\D/g, "")}`, "_blank")
+                                  window.open(`https://wa.me/${customer.phone?.replace(/\D/g, "")}`, "_blank")
                                 }
                                 className="bg-green-500 hover:bg-green-600 text-white flex-1 sm:flex-none"
                               >
@@ -2138,7 +2161,9 @@ export default function DashboardPage() {
                             <th className="p-3 text-right font-semibold">الحساب</th>
                             <th className="p-3 text-right font-semibold">تاريخ الانتهاء القديم</th>
                             <th className="p-3 text-right font-semibold">تاريخ الانتهاء الجديد</th>
-                            <th className="p-3 text-right font-semibold">السعر</th>
+                            {currentAdmin?.role === "super_admin" && (
+                              <th className="p-3 text-right font-semibold">السعر</th>
+                            )}
                             <th className="p-3 text-right font-semibold">تاريخ التجديد</th>
                           </tr>
                         </thead>
@@ -2159,9 +2184,11 @@ export default function DashboardPage() {
                               <td className="p-3 text-green-600 font-semibold">
                                 {renewal.new_end_date ? new Date(renewal.new_end_date).toLocaleDateString("ar-EG") : "-"}
                               </td>
-                              <td className="p-3 text-indigo-600 font-bold">
-                                {(renewal.price || 0).toLocaleString()} ج.م
-                              </td>
+                              {currentAdmin?.role === "super_admin" && (
+                                <td className="p-3 text-indigo-600 font-bold">
+                                  {(renewal.price || 0).toLocaleString()} ج.م
+                                </td>
+                              )}
                               <td className="p-3 text-gray-500">
                                 {new Date(renewal.created_at).toLocaleDateString("ar-EG")}
                               </td>
@@ -2228,7 +2255,9 @@ export default function DashboardPage() {
                                   <XCircle className="h-3 w-3" />
                                   منتهي منذ {daysExpired} يوم
                                 </span>
-                                <span className="text-xs bg-white px-2 py-1 rounded">{customer.price} ج.م</span>
+                                {currentAdmin?.role === "super_admin" && (
+                                  <span className="text-xs bg-white px-2 py-1 rounded">{customer.price} ج.م</span>
+                                )}
                                 <span className="text-xs bg-white px-2 py-1 rounded flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
                                   {formatDate(customer.end_date)}
@@ -2257,7 +2286,7 @@ export default function DashboardPage() {
                                 <Button
                                   size="sm"
                                   onClick={() =>
-                                    window.open(`https://wa.me/${customer.phone.replace(/\D/g, "")}`, "_blank")
+                                    window.open(`https://wa.me/${customer.phone?.replace(/\D/g, "")}`, "_blank")
                                   }
                                   className="bg-green-500 hover:bg-green-600 text-white flex-1 sm:flex-none"
                                 >
@@ -3023,18 +3052,20 @@ export default function DashboardPage() {
                       required
                     />
                   </div>
-                <div>
-                  <Label htmlFor="price">السعر (ج.م) *</Label>
-                  <Input
-                    id="price"
-                    name="price"
-                    type="number"
-                    step="0.01"
-                    value={formData.price || ""}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
+                {(modalType === "addCustomer" || currentAdmin?.role === "super_admin") && (
+                  <div>
+                    <Label htmlFor="price">السعر (ج.م) *</Label>
+                    <Input
+                      id="price"
+                      name="price"
+                      type="number"
+                      step="0.01"
+                      value={formData.price || ""}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                )}
                 {modalType === "editCustomer" && (
                   <div>
                     <Label htmlFor="status">الحالة</Label>
@@ -3263,7 +3294,7 @@ export default function DashboardPage() {
               {exportOptions.accountFilters.platform && (
                 <p className="text-xs text-blue-600">
                   المنصة المختارة: <strong>{exportOptions.accountFilters.platform}</strong>
-                  ({accounts.filter(a => a.platform === exportOptions.accountFilters.platform).length} حساب، {customers.filter(c => accounts.filter(a => a.platform === exportOptions.accountFilters.platform).map(a => a.id).includes(c.account_id)).length} مشترك)
+                  ({accounts.filter(a => a.platform === exportOptions.accountFilters.platform).length} حساب، {customers.filter(c => accounts.some(a => a.platform === exportOptions.accountFilters.platform && a.id === c.account_id)).length} مشترك)
                 </p>
               )}
             </div>
